@@ -31,7 +31,12 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24.12.0
-      - name: SQL Server e dependencia isolados com credencial aleatoria
+      - name: Testar bloqueio sem cofre e isolamento do segredo
+        run: python3 .ci/test_secret_store.py
+      - name: Consumir GitHub Actions Secret e autenticar SQL isolado
+        env:
+          CI_SECRET_SEED: ${{ secrets.UNIP_CI_SECRET_SEED }}
+          REQUIRE_SECRET_STORE: ${{ github.event_name != 'pull_request' && 'true' || 'false' }}
         run: python3 .ci/manage.py init
       - name: Restaurar dependencias NET
         run: dotnet restore

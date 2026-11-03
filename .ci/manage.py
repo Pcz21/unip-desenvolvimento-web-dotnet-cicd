@@ -1,6 +1,6 @@
 """Disposable CI infrastructure and deployment tests; never publish runtime secrets."""
 from pathlib import Path
-import argparse,datetime,io,json,os,re,secrets,shutil,socket,ssl,subprocess,sys,tempfile,time,urllib.request,zipfile
+import argparse,datetime,hashlib,hmac,io,json,os,re,secrets,shutil,socket,ssl,subprocess,sys,tempfile,time,urllib.request,zipfile
 ROOT=Path(__file__).resolve().parents[1]
 RUN=re.sub('[^a-z0-9-]','',os.environ.get('GITHUB_RUN_ID',os.environ.get('UNIP_CI_ID','local20261102')).lower())
 STATE=Path(os.environ.get('RUNNER_TEMP',tempfile.gettempdir()))/('unip-ci-'+RUN)
@@ -28,16 +28,37 @@ def freeport():
  with socket.socket() as s:s.bind(('127.0.0.1',0));return s.getsockname()[1]
 def port(name,internal):
  return int(capture(['docker','port',name,str(internal)]).splitlines()[0].rsplit(':',1)[1])
+def database_password():
+ # Remove the root secret before spawning any child process; never persist it.
+ seed=os.environ.pop('CI_SECRET_SEED','')
+ if os.environ.get('REQUIRE_SECRET_STORE')=='true' and not seed:
+  raise RuntimeError('GitHub Actions Secret UNIP_CI_SECRET_SEED obrigatorio; infraestrutura bloqueada.')
+ if seed:
+  if not re.fullmatch(r'[0-9a-fA-F]{64}',seed):
+   raise RuntimeError('Formato invalido do secret de CI; nenhum valor foi registrado.')
+  context='unip-ci:'+RUN+':'+os.environ.get('GITHUB_RUN_ATTEMPT','local')+':'+secrets.token_hex(16)
+  material=hmac.new(bytes.fromhex(seed),context.encode(),hashlib.sha256).hexdigest()
+  source='github_actions_secrets'
+ else:
+  material=secrets.token_hex(32);source='ephemeral_local'
+ password='Ci!'+material+'Aa9'
+ if os.environ.get('GITHUB_ACTIONS')=='true':
+  if seed:print('::add-mask::'+seed)
+  print('::add-mask::'+password)
+ return password,source
+
 def init():
+ password,source=database_password()
  STATE.mkdir(parents=True,exist_ok=False)
  prefix='unip-ci-'+RUN
- password='Ci!'+secrets.token_hex(20)+'Aa9'
  s={'prefix':prefix,'network':prefix+'-net','sql':prefix+'-sql','dependency':prefix+'-dependency','gateway':prefix+'-gateway','baseline':prefix+'-a','candidate':prefix+'-b','password':password}
  save(s)
  (STATE/'sql.env').write_text('ACCEPT_EULA=Y\nMSSQL_SA_PASSWORD='+password+'\n',encoding='utf-8')
  command(['docker','network','create',s['network']],stdout=subprocess.DEVNULL)
  command(['docker','run','-d','--name',s['sql'],'--network',s['network'],'--env-file',STATE/'sql.env','-p','127.0.0.1::1433','mcr.microsoft.com/mssql/server:2025-latest'],stdout=subprocess.DEVNULL)
  wait(lambda:subprocess.run(['docker','exec',s['sql'],'sh','-c','SQLCMDPASSWORD="$MSSQL_SA_PASSWORD" /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -C -Q "SELECT 1"'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL).returncode==0)
+ if source=='github_actions_secrets':
+  event('secret_store_verified',provider='GitHub Actions Secrets',secret_name='UNIP_CI_SECRET_SEED',database_authentication='verified',credential='derived_per_execution',root_secret_persisted=False)
  shutil.copy2(ROOT/'Ferramentas/dependency.cjs',STATE/'dependency.cjs')
  command(['docker','run','-d','--name',s['dependency'],'--network',s['network'],'--mount',f'type=bind,source={STATE / "dependency.cjs"},target=/dependency.cjs,readonly','node:24.12.0-bookworm-slim','node','/dependency.cjs'],stdout=subprocess.DEVNULL)
  cs=f'Server=127.0.0.1,{port(s["sql"],1433)};Database=PortalIntegration;User ID=sa;Password={password};TrustServerCertificate=True'
