@@ -1,0 +1,79 @@
+name: Full stack CI staging e rollback
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      expose_staging:
+        description: Staging HTTPS externo temporario previamente autorizado
+        type: boolean
+        default: false
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    env:
+      EXTERNAL_DEPLOYMENT_APPROVED: ${{ inputs.expose_staging == true && 'true' || 'false' }}
+      STAGING_HOLD_SECONDS: '900'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.401
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.12.0
+      - name: SQL Server e dependencia isolados com credencial aleatoria
+        run: python3 .ci/manage.py init
+      - name: Restaurar dependencias NET
+        run: dotnet restore
+      - name: Compilar NET
+        run: dotnet build --no-restore -c Release
+      - name: Executar testes automatizados NET
+        run: dotnet run --project PortalTarefas.Tests -c Release --no-build
+      - name: Instalar dependencias React
+        working-directory: PortalTarefas.Frontend
+        run: npm ci
+      - name: Testar frontend
+        working-directory: PortalTarefas.Frontend
+        run: npm test
+      - name: Gerar frontend de producao
+        working-directory: PortalTarefas.Frontend
+        run: npm run build
+      - name: Gerar publicacao NET
+        run: |
+          dotnet publish PortalTarefas.Web -c Release --no-build -o artifacts/publish
+          cp -R PortalTarefas.Frontend/dist/. artifacts/publish/wwwroot/app/
+          git rev-parse HEAD > artifacts/publish/commit.txt
+      - name: Construir imagens rastreaveis baseline e candidata
+        run: python3 .ci/manage.py images
+      - name: Implantar ambiente de teste e validar HTTPS local
+        run: python3 .ci/manage.py deploy
+      - name: Validar promocao rollback e restauracao funcional
+        run: python3 .ci/manage.py rollback
+      - name: Instalar tunel oficial para staging externo autorizado
+        if: inputs.expose_staging == true
+        run: |
+          curl -fL https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o /tmp/cloudflared
+          chmod +x /tmp/cloudflared
+          echo /tmp >> "$GITHUB_PATH"
+      - name: Validar HTTPS publico smoke e rollback externo
+        if: inputs.expose_staging == true
+        run: python3 .ci/manage.py expose
+      - name: Registrar evidencias e hashes
+        if: always()
+        run: |
+          mkdir -p artifacts/evidence
+          git rev-parse HEAD > artifacts/evidence/source-commit.txt
+          find artifacts/publish -type f -exec sha256sum {} + > artifacts/evidence/publish-sha256.txt || true
+      - name: Encerrar apenas recursos descartaveis deste job
+        if: always()
+        run: python3 .ci/manage.py cleanup

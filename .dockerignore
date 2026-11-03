@@ -6,3 +6,9 @@
 .env
 *.pfx
 publish
+
+artifacts
+.ci/runtime
+*.env
+*.key
+*.pem
