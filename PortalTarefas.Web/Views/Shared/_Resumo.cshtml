@@ -1,0 +1,2 @@
+@model Tarefa
+<article><h2><a asp-action="Details" asp-route-id="@Model.Id">@Model.Titulo</a></h2><p>@Model.Descricao</p><p>@Model.Situacao · Prioridade @Model.Prioridade · @Model.Prazo.ToString("dd/MM/yyyy")</p><a asp-action="Edit" asp-route-id="@Model.Id">Editar</a></article>

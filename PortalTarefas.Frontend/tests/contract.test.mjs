@@ -1,0 +1,3 @@
+import test from 'node:test';import assert from 'node:assert/strict';import{readFileSync}from'node:fs';
+test('Contrato contem CRUD e limites de resposta',()=>{let d=JSON.parse(readFileSync('../Contratos/openapi.json','utf8'));assert.ok(d.paths['/api/tarefas'].get);assert.ok(d.paths['/api/tarefas/{id}'].put.responses['409']);assert.ok(d.paths['/api/tarefas'].post.responses['201'])});
+test('Cliente regenerado tem operacoes CRUD',()=>{let s=readFileSync('src/generated.ts','utf8');for(let method of ['listarTarefas','obterTarefa','criarTarefa','atualizarTarefa','excluirTarefa'])assert.ok(s.includes(method))});

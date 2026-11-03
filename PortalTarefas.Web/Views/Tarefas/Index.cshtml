@@ -1,0 +1,3 @@
+@model List<Tarefa>
+<h1>Tarefas</h1>
+@foreach(var t in Model){<partial name="_Resumo" model="t"/>}

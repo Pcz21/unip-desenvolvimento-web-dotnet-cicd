@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="PortalTarefas.Tests/PortalTarefas.Tests.csproj" />
+  <Project Path="PortalTarefas.Web/PortalTarefas.Web.csproj" />
+</Solution>

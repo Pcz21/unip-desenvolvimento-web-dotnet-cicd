@@ -1,0 +1,13 @@
+**/bin/
+**/obj/
+**/node_modules/
+**/dist/
+**/*.tsbuildinfo
+.env
+*.env
+*.pfx
+*.key
+*.pem
+publish/
+artifacts/
+.ci/runtime/

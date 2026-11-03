@@ -1,0 +1,7 @@
+@model TarefaInputModel
+<h1>Cadastrar tarefa</h1><form method="post"><div asp-validation-summary="All" role="alert"></div>
+<input type="hidden" asp-for="Versao"/>
+<label asp-for="Titulo">Título</label><input asp-for="Titulo"/><span asp-validation-for="Titulo"></span>
+<label asp-for="Descricao">Descrição</label><textarea asp-for="Descricao"></textarea>
+<label asp-for="Prioridade">Prioridade</label><select asp-for="Prioridade"><option value="1">Normal</option><option value="2">Média</option><option value="3">Alta</option></select>
+<label asp-for="Prazo">Prazo</label><input asp-for="Prazo" type="date"/><span asp-validation-for="Prazo"></span><button>Salvar</button></form>
